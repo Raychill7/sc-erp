@@ -1,0 +1,49 @@
+# 用法：复制 deploy/env.docker.example 为项目根目录的 .env ，修改密码与 JWT_SECRET 后执行
+#   docker compose up -d --build
+# 浏览器访问 http://服务器IP:3000 （生产请务必再加 HTTPS 反向代理）
+
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: sc_erp
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/docker/00-use-sc_erp.sql:/docker-entrypoint-initdb.d/00-use.sql:ro
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      DB_NAME: sc_erp
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      UPLOAD_DIR: uploads
+    volumes:
+      - app_uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "node scripts/seed.js && exec node src/index.js"
+
+volumes:
+  mysql_data:
+  app_uploads:
