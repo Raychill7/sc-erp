@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { config } from './config.js';
 import { authMiddleware } from './middleware/auth.js';
 import bcrypt from 'bcryptjs';
+import mysql from 'mysql2/promise';
 import { pool } from './db.js';
 
 import authRoutes from './routes/auth.js';
@@ -73,20 +74,19 @@ async function autoInit() {
       }
       console.log('Schema 路径:', schemaPath);
       let schemaSql = fs.readFileSync(schemaPath, 'utf8');
-      // 将 CREATE TABLE 替换为 CREATE TABLE IF NOT EXISTS，避免重复执行报错
       schemaSql = schemaSql.replace(/CREATE TABLE /g, 'CREATE TABLE IF NOT EXISTS ');
-      const statements = schemaSql
-        .split(';')
-        .map(s => s.trim())
-        .filter(s => s.length > 0 && !s.startsWith('--'));
-      for (const stmt of statements) {
-        try {
-          await pool.query(stmt);
-        } catch (stmtErr) {
-          console.error('语句执行失败:', stmt.substring(0, 80), stmtErr.message);
-        }
+      // 单连接 + multipleStatements，保证 FOREIGN_KEY_CHECKS 等 SET 语句跨语句生效
+      const conn = await mysql.createConnection({
+        ...config.db,
+        multipleStatements: true,
+        timezone: '+00:00',
+      });
+      try {
+        await conn.query(schemaSql);
+        console.log('建表完成');
+      } finally {
+        await conn.end();
       }
-      console.log('建表完成');
     }
     const [rows] = await pool.query('SELECT id FROM users WHERE username = ?', ['admin']);
     if (rows.length === 0) {
