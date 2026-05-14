@@ -5,6 +5,8 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { config } from './config.js';
 import { authMiddleware } from './middleware/auth.js';
+import bcrypt from 'bcryptjs';
+import { pool } from './db.js';
 
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
@@ -59,6 +61,32 @@ app.use((err, _req, res, _next) => {
   res.status(code).json({ message: err.message || '服务器错误' });
 });
 
-app.listen(config.port, () => {
-  console.log(`SC-ERP API 运行于 http://localhost:${config.port}`);
+// 自动初始化数据库（幂等，生产环境首次部署用）
+async function autoSeed() {
+  try {
+    const [rows] = await pool.query('SELECT id FROM users WHERE username = ?', ['admin']);
+    if (rows.length === 0) {
+      const hash = bcrypt.hashSync('admin123', 10);
+      await pool.query(
+        'INSERT INTO users (username, password_hash, display_name, role, status) VALUES (?,?,?,?,1)',
+        ['admin', hash, '系统管理员', 'admin']
+      );
+      console.log('已创建默认管理员: admin / admin123');
+    }
+    await pool.query(
+      "INSERT INTO material_categories (name, sort_order) VALUES ('原材料',1),('辅料',2),('包材',3) ON DUPLICATE KEY UPDATE name = VALUES(name)"
+    );
+    await pool.query(
+      "INSERT INTO system_config (`key`, `value`) VALUES ('pay_methods','[\"现结\",\"月结\",\"批结\"]'),('company_name','\"采购P2P演示企业\"') ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)"
+    );
+    console.log('Seed 完成');
+  } catch (e) {
+    console.error('Seed 失败（若表已存在可忽略）:', e.message);
+  }
+}
+
+autoSeed().then(() => {
+  app.listen(config.port, () => {
+    console.log(`SC-ERP API 运行于 http://localhost:${config.port}`);
+  });
 });
