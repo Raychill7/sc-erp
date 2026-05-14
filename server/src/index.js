@@ -64,23 +64,27 @@ app.use((err, _req, res, _next) => {
 // 自动初始化数据库（幂等：仅在首次部署时建表+填充种子数据）
 async function autoInit() {
   try {
-    const [tables] = await pool.query(
-      "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'",
-      [config.db.database]
-    );
+    const [tables] = await pool.query("SHOW TABLES LIKE 'users'");
     if (tables.length === 0) {
       console.log('首次部署，执行建表...');
-      let schemaPath = path.resolve(__dirname, '../database/schema.sql');   // Docker
+      let schemaPath = path.resolve(__dirname, '../database/schema.sql');
       if (!fs.existsSync(schemaPath)) {
-        schemaPath = path.resolve(__dirname, '../../database/schema.sql');  // 本地开发
+        schemaPath = path.resolve(__dirname, '../../database/schema.sql');
       }
-      const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+      console.log('Schema 路径:', schemaPath);
+      let schemaSql = fs.readFileSync(schemaPath, 'utf8');
+      // 将 CREATE TABLE 替换为 CREATE TABLE IF NOT EXISTS，避免重复执行报错
+      schemaSql = schemaSql.replace(/CREATE TABLE /g, 'CREATE TABLE IF NOT EXISTS ');
       const statements = schemaSql
         .split(';')
         .map(s => s.trim())
         .filter(s => s.length > 0 && !s.startsWith('--'));
       for (const stmt of statements) {
-        await pool.query(stmt);
+        try {
+          await pool.query(stmt);
+        } catch (stmtErr) {
+          console.error('语句执行失败:', stmt.substring(0, 80), stmtErr.message);
+        }
       }
       console.log('建表完成');
     }
