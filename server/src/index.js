@@ -70,7 +70,10 @@ async function autoInit() {
     );
     if (tables.length === 0) {
       console.log('首次部署，执行建表...');
-      const schemaPath = path.resolve(__dirname, '../../database/schema.sql');
+      let schemaPath = path.resolve(__dirname, '../database/schema.sql');   // Docker
+      if (!fs.existsSync(schemaPath)) {
+        schemaPath = path.resolve(__dirname, '../../database/schema.sql');  // 本地开发
+      }
       const schemaSql = fs.readFileSync(schemaPath, 'utf8');
       const statements = schemaSql
         .split(';')

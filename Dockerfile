@@ -13,6 +13,7 @@ RUN apk add --no-cache tini
 COPY server/package*.json ./
 RUN npm ci --omit=dev
 COPY server ./
+COPY database ./database
 COPY --from=client-build /build/client/dist ./public
 ENV NODE_ENV=production
 EXPOSE 3000
