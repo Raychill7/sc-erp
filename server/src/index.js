@@ -61,9 +61,26 @@ app.use((err, _req, res, _next) => {
   res.status(code).json({ message: err.message || '服务器错误' });
 });
 
-// 自动初始化数据库（幂等，生产环境首次部署用）
-async function autoSeed() {
+// 自动初始化数据库（幂等：仅在首次部署时建表+填充种子数据）
+async function autoInit() {
   try {
+    const [tables] = await pool.query(
+      "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'",
+      [config.db.database]
+    );
+    if (tables.length === 0) {
+      console.log('首次部署，执行建表...');
+      const schemaPath = path.resolve(__dirname, '../../database/schema.sql');
+      const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+      const statements = schemaSql
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.length > 0 && !s.startsWith('--'));
+      for (const stmt of statements) {
+        await pool.query(stmt);
+      }
+      console.log('建表完成');
+    }
     const [rows] = await pool.query('SELECT id FROM users WHERE username = ?', ['admin']);
     if (rows.length === 0) {
       const hash = bcrypt.hashSync('admin123', 10);
@@ -79,13 +96,13 @@ async function autoSeed() {
     await pool.query(
       "INSERT INTO system_config (`key`, `value`) VALUES ('pay_methods','[\"现结\",\"月结\",\"批结\"]'),('company_name','\"采购P2P演示企业\"') ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)"
     );
-    console.log('Seed 完成');
+    console.log('数据库初始化完成');
   } catch (e) {
-    console.error('Seed 失败（若表已存在可忽略）:', e.message);
+    console.error('初始化失败:', e.message);
   }
 }
 
-autoSeed().then(() => {
+autoInit().then(() => {
   app.listen(config.port, () => {
     console.log(`SC-ERP API 运行于 http://localhost:${config.port}`);
   });

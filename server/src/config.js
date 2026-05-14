@@ -1,9 +1,11 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-function env(key, fallback) {
-  const railwayKey = key.replace('DB_', 'MYSQL_');
-  return process.env[key] || process.env[railwayKey] || fallback;
+function env(...keys) {
+  for (const k of keys) {
+    if (process.env[k]) return process.env[k];
+  }
+  return keys[keys.length - 1];
 }
 
 export const config = {
@@ -12,10 +14,10 @@ export const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   uploadDir: process.env.UPLOAD_DIR || 'uploads',
   db: {
-    host: env('DB_HOST', '127.0.0.1'),
-    port: Number(env('DB_PORT', '3306')),
-    user: env('DB_USER', 'root'),
-    password: env('DB_PASSWORD', '') || '',
-    database: env('DB_NAME', 'sc_erp'),
+    host: env('DB_HOST', 'MYSQLHOST', 'MYSQL_HOST', '127.0.0.1'),
+    port: Number(env('DB_PORT', 'MYSQLPORT', 'MYSQL_PORT', '3306')),
+    user: env('DB_USER', 'MYSQLUSER', 'MYSQL_USER', 'root'),
+    password: env('DB_PASSWORD', 'MYSQLPASSWORD', 'MYSQL_PASSWORD', '') || '',
+    database: env('DB_NAME', 'MYSQLDATABASE', 'MYSQL_DATABASE', 'sc_erp'),
   },
 };
